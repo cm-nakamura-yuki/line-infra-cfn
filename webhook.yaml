@@ -1,0 +1,54 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: LINE bot webhook using API Gateway and Lambda.
+
+Parameters:
+  FunctionName:
+    Type: String
+    Description: Backend Lambda function name
+
+  WebhookName:
+    Type: String
+    Description: LINE bot webhook name
+
+  Env:
+    Type: String
+    Default: itg
+    AllowedValues: ["itg", "stg", "prd"]
+    Description: Set environment
+
+Resources:
+  # Webhook
+  Api:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub ${WebhookName}_${Env}
+
+  # Resource(URL) Path
+  ApiResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref Api
+      ParentId: !GetAtt Api.RootResourceId  
+      PathPart: webhook
+
+  # Set Lambda permission invoke from API Gateway
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${FunctionName}_${Env}
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+
+  # Resource Method（HTTP POST, AWS_PROXY）
+  ApiResourceMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref ApiResource
+      AuthorizationType: None
+      HttpMethod: POST
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${FunctionName}_${Env}/invocations
+    DependsOn: LambdaPermission
